@@ -89,7 +89,8 @@ fun HomeScreen(navController: NavController) {
 
                     Button(
                         onClick = {
-
+                            Settings.hosts.add(Host(newHostName, newHostUrl))
+                            Settings.save(context)
                         }
                     ) {
                         Icon(
