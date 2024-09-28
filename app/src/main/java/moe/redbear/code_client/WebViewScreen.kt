@@ -1,12 +1,12 @@
 package moe.redbear.code_client
 
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
 import android.view.KeyEvent
 import android.view.KeyEvent.ACTION_DOWN
-import android.view.MotionEvent
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -29,6 +29,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import android.view.View
+import android.webkit.JavascriptInterface
 
 @OptIn(DelicateCoroutinesApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
@@ -54,7 +55,26 @@ fun WebViewScreen(navController: NavController, host: Host) {
         AndroidView(factory = { context ->
             WebView.setWebContentsDebuggingEnabled(true)
             CustomWebView(context).apply {
-                webViewClient = WebViewClient()
+                addJavascriptInterface(CustomClipboardInterface(context), "AndroidClipboard")
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        super.onPageFinished(view, url)
+                        view?.evaluateJavascript(
+                            """
+                            navigator.clipboard.readText = function() {
+                                return new Promise(function(resolve, reject) {
+                                    try {
+                                        var clipboardText = AndroidClipboard.getClipboardText();
+                                        resolve(clipboardText);
+                                    } catch (error) {
+                                        reject(error);
+                                    }
+                                });
+                            };
+        """.trimIndent(), null
+                        )
+                    }
+                }
                 settings.apply {
                     setLayerType(View.LAYER_TYPE_HARDWARE, null)
                     javaScriptEnabled = true
@@ -103,5 +123,17 @@ class CustomWebView(context: Context) : WebView(context) {
                 }
         }
         return super.dispatchKeyEvent(event)
+    }
+}
+
+class CustomClipboardInterface(private val context: Context) {
+    @JavascriptInterface
+    fun getClipboardText(): String {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        if (clipboard.hasPrimaryClip()) {
+            val item = clipboard.primaryClip?.getItemAt(0)
+            return item?.text?.toString() ?: ""
+        }
+        return ""
     }
 }
